@@ -133,16 +133,10 @@ export function useSwapState(): SwapStateType {
     setQuoteError(null);
 
     try {
-      // TODO: Call actual routing API (shell-dex-m2-router-integration)
-      // For now, this is a placeholder
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // TODO: Parse response and call handleSetQuote
-      console.log(
-        `Would refresh quote for ${inputAmount} ${inputToken.symbol} -> ${outputToken.symbol} on chain ${chainId}`
-      );
-      
-      setQuoteError('Quote refresh not yet implemented (M2 routing integration pending)');
+      // Import dynamically to avoid circular dependencies
+      const { getQuote } = await import('@/lib/swapRouter');
+      const newQuote = await getQuote(inputToken, outputToken, inputAmount, chainId);
+      handleSetQuote(newQuote);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch quote';
       setQuoteError(message);
@@ -150,7 +144,7 @@ export function useSwapState(): SwapStateType {
     } finally {
       setIsLoadingQuote(false);
     }
-  }, [inputToken, outputToken, inputAmount, chainId]);
+  }, [inputToken, outputToken, inputAmount, chainId, handleSetQuote]);
 
   const handleClearError = useCallback(() => {
     setQuoteError(null);
