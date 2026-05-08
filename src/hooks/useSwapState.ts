@@ -135,10 +135,18 @@ export function useSwapState(): SwapStateType {
     try {
       // Import dynamically to avoid circular dependencies
       const { getQuote } = await import('@/lib/swapRouter');
+      const { validateTokenPair, validateInputAmount } = await import('@/lib/swapErrors');
+      
+      // Validate before requesting quote
+      validateTokenPair(inputToken, outputToken);
+      validateInputAmount(inputAmount, inputToken.decimals);
+      
       const newQuote = await getQuote(inputToken, outputToken, inputAmount, chainId);
       handleSetQuote(newQuote);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch quote';
+      const { handleRoutingError } = await import('@/lib/swapErrors');
+      const swapError = handleRoutingError(error);
+      const message = swapError.message;
       setQuoteError(message);
       setLastError(message);
     } finally {
