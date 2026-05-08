@@ -15,26 +15,26 @@ import { WalletConnect } from './WalletConnect';
 
 export function Header() {
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <h1 className="text-2xl font-bold text-gray-900">Shell DEX</h1>
+          <h1 className="text-2xl font-bold text-blue-600">Shell DEX</h1>
           <nav className="hidden md:flex gap-6">
             <a
               href="#"
-              className="text-gray-700 hover:text-gray-900 font-medium transition"
+              className="text-gray-700 hover:text-blue-600 font-medium transition"
             >
               Swap
             </a>
             <a
               href="#"
-              className="text-gray-700 hover:text-gray-900 font-medium transition"
+              className="text-gray-700 hover:text-blue-600 font-medium transition"
             >
               Bridge
             </a>
             <a
               href="#"
-              className="text-gray-700 hover:text-gray-900 font-medium transition"
+              className="text-gray-700 hover:text-blue-600 font-medium transition"
             >
               Liquidity
             </a>
