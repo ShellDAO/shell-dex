@@ -128,6 +128,95 @@ Token addresses on Shell Testnet are placeholders and will be updated as on-chai
 
 M2 uses fixture data (0.3% fee) to test the UI flow. Real routing will integrate with Shell DEX API in M3.
 
+## M3 — Transaction Execution & Signing
+
+The third milestone (`M3`) brings full trading functionality with transaction execution:
+
+### M3 Features
+
+✅ **Implemented:**
+- Real Shell DEX routing API integration (fallback to fixtures for testing)
+- Token allowance checking and ERC20 approval flows
+- Transaction building with slippage tolerance
+- Swap execution state machine (approval → swap → confirmation)
+- Slippage tolerance configuration (0-50%, default 0.5%)
+- Gas estimation display
+- Transaction status monitoring with TX hash tracking
+- Receipt modal with block explorer links
+- Retry logic for failed transactions
+
+🟡 **Planned (M4+):**
+- Multi-hop route discovery and UI display
+- Advanced gas optimization strategies
+- Bridge functionality
+- Limit orders and conditional execution
+
+### Testing M3 Locally
+
+1. Start the dev server: `npm run dev`
+2. Connect wallet and switch to Arbitrum One or Shell Testnet
+3. In the Swap panel:
+   - Select "From" and "To" tokens
+   - Enter an amount
+   - Click "Refresh Quote" to fetch pricing
+   - Adjust slippage tolerance if needed (default 0.5%)
+   - Click "Swap" to initiate the transaction
+   - Approve token if required (displays as separate step)
+   - Monitor transaction status in real-time
+   - View receipt with explorer link after confirmation
+
+### M3 Execution Flow
+
+```
+1. Quote Fetch
+   ↓
+2. User Reviews Quote
+   ↓
+3. Check Token Allowance
+   ├─ If insufficient: Request Approval TX
+   │  └─ Wait for Approval Confirmation
+   ├─ Else: Skip to Swap
+   ↓
+4. Build Swap Transaction
+   ├─ Apply slippage tolerance
+   ├─ Validate transaction parameters
+   ├─ Calculate minimum output
+   ↓
+5. Submit Swap Transaction
+   ├─ User signs in wallet
+   ├─ TX pending on chain
+   ↓
+6. Wait for Confirmation
+   └─ Display receipt with TX hash and explorer link
+```
+
+### Slippage Tolerance
+
+Slippage is the acceptable price difference between the quoted output and actual execution price. M3 includes:
+- **Default:** 0.5% (typical for most swaps)
+- **Range:** 0-50% (slider control)
+- **Applied to:** Minimum output amount is recalculated as `expectedOutput * (1 - slippageTolerance)`
+- **Impact:** Allows swaps to succeed even with minor price movements
+
+Example: If quote shows 100 USDC output with 0.5% slippage, minimum accepted is 99.5 USDC.
+
+### Gas Estimation
+
+M3 displays estimated gas consumption from the routing API (if available). Users can see:
+- Estimated gas units required
+- Approximate transaction cost
+- Gas price information (subject to network conditions)
+
+Gas estimates are indicative and may vary based on network congestion.
+
+### Error Recovery
+
+If a transaction fails:
+1. Error message is displayed with reason (insufficient balance, slippage exceeded, etc.)
+2. "Retry" button appears to attempt the transaction again
+3. Users can adjust slippage or amount and resubmit
+4. All state persists for retry flow
+
 ## Scripts
 
 - `npm run dev` — start local development server (http://localhost:3000)
@@ -178,10 +267,36 @@ Router is configurable via `NEXT_PUBLIC_SHELL_DEX_ROUTER_URL` environment variab
 
 Toast component (`src/components/Toast.tsx`) displays non-blocking notifications for errors, successes, and warnings.
 
+### Transaction Execution (M3)
+
+`src/lib/tokenApproval.ts` handles:
+- **Allowance Checking:** Read ERC20 allowance from chain
+- **Approval Transactions:** Build and encode `approve()` calls
+- **Unlimited Approvals:** Default strategy to minimize repeated approvals
+
+`src/lib/swapTransaction.ts` provides:
+- **Slippage Calculation:** Convert tolerance percentage to minimum output amount
+- **Transaction Building:** Construct viem Transaction from routing quote
+- **Validation:** Ensure transaction data integrity before submission
+
+`src/hooks/useSwapExecution.ts` manages:
+- **Execution State Machine:** Idle → Checking → Approving → Swapping → Success/Failed
+- **Flow Orchestration:** Chains approval (if needed) → swap submission → receipt waiting
+- **Retry Logic:** Users can retry failed transactions with adjusted parameters
+
+`src/components/ReceiptModal.tsx` displays:
+- **Success/Failure Status:** Clear visual feedback with color coding
+- **Transaction Details:** Hash, block number, confirmations
+- **Block Explorer Link:** Direct link to transaction on chain explorer
+- **Amount Summary:** Input/output tokens and amounts
+
 ### Extensibility
 
 - **Adding Chains:** Define new chains in `src/config/chains.ts` and wagmi config in `src/lib/wagmi.ts`
 - **Token Lists:** Add tokens to `src/config/tokens.ts` with per-chain addresses
 - **Routing:** Replace fixture data in `src/lib/swapRouter.ts` with real API calls
+- **Router Address:** Configure swap contract address via `NEXT_PUBLIC_SHELL_DEX_ROUTER_ADDRESS`
+- **Slippage Defaults:** Adjust default tolerance in `src/components/SwapPanel.tsx`
 - **RPC URLs:** Public RPCs are used by default; can be overridden via environment variables for production deploys
+
 

@@ -27,6 +27,10 @@ export interface Quote {
   priceImpact: number;
   minReceived: string;
   expireTime: number;
+  // M3 additions
+  estimatedGas?: string;
+  swapContract?: string;
+  callData?: string;
 }
 
 export interface SwapStateType {

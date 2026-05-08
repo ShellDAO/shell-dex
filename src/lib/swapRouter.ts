@@ -1,15 +1,24 @@
 /**
- * Shell DEX routing interface for M2.
+ * Shell DEX routing interface for M2/M3.
  * 
- * Provides quote fetching from a routing service or fixture data.
+ * Provides quote fetching from a routing service with optional fixture fallback.
  * 
  * M2 Status: Uses fixture data for UI/UX validation.
- * M3 Status: Will integrate actual Shell DEX routing API.
+ * M3 Status: Integrated with real Shell DEX routing API; fixtures available for testing.
  */
 
 import { Token, getTokenAddress } from '@/config/tokens';
 import { SupportedChainId } from '@/config/chains';
 import { Quote } from '@/hooks';
+
+/**
+ * Extended quote with transaction data for M3 execution.
+ */
+export interface SwapQuote extends Quote {
+  swapContract?: string;
+  callData?: string;
+  estimatedGas?: string;
+}
 
 export interface SwapRouterConfig {
   routerApiUrl?: string;
@@ -17,7 +26,7 @@ export interface SwapRouterConfig {
 }
 
 let routerConfig: SwapRouterConfig = {
-  useFixtures: true,
+  useFixtures: process.env.NODE_ENV !== 'production',
   routerApiUrl: process.env.NEXT_PUBLIC_SHELL_DEX_ROUTER_URL,
 };
 
@@ -70,18 +79,20 @@ function generateFixtureQuote(
 /**
  * Fetch a swap quote from the routing service or fixtures.
  * 
+ * M3: Real routing API support with transaction data.
+ * 
  * @param inputToken The token being sold
  * @param outputToken The token being bought
  * @param inputAmount The amount of input token (as decimal string)
  * @param chainId The EVM chain ID
- * @returns Quote data including output amount, fees, and route
+ * @returns Quote data including output amount, fees, route, and M3 transaction data
  */
 export async function getQuote(
   inputToken: Token,
   outputToken: Token,
   inputAmount: string,
   chainId: SupportedChainId
-): Promise<Quote> {
+): Promise<SwapQuote> {
   if (!inputToken || !outputToken || !inputAmount) {
     throw new Error('Missing required parameters for quote');
   }
@@ -99,34 +110,57 @@ export async function getQuote(
     );
   }
 
-  // Use fixtures in M2; real API in M3
+  // Try real API first in production, fallback to fixtures
+  if (routerConfig.routerApiUrl) {
+    try {
+      const response = await fetch(`${routerConfig.routerApiUrl}/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputToken: inputAddr,
+          outputToken: outputAddr,
+          inputAmount,
+          chainId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Router API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return {
+        ...data,
+        // Ensure all required fields are present
+        inputAmount: data.inputAmount || inputAmount,
+        outputAmount: data.outputAmount,
+        route: data.route || [inputToken.id, outputToken.id],
+        fees: data.fees || { total: '0', percentage: 0 },
+        priceImpact: data.priceImpact ?? 0,
+        minReceived: data.minReceived || data.outputAmount,
+        expireTime: data.expireTime || Date.now() + 30000,
+        // M3 transaction data
+        swapContract: data.swapContract,
+        callData: data.callData,
+        estimatedGas: data.estimatedGas,
+      };
+    } catch (error) {
+      // Log error but don't fail; try fixtures if available
+      console.error('Shell DEX routing API error:', error);
+      if (!routerConfig.useFixtures) {
+        throw error;
+      }
+    }
+  }
+
+  // Fallback to fixtures (M2 mode or API failure)
   if (routerConfig.useFixtures) {
     // Simulate API latency
     await new Promise(resolve => setTimeout(resolve, 200));
     return generateFixtureQuote(inputToken, outputToken, inputAmount, chainId);
   }
 
-  // TODO: Integrate real Shell DEX routing API
-  if (routerConfig.routerApiUrl) {
-    const response = await fetch(`${routerConfig.routerApiUrl}/quote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inputToken: inputAddr,
-        outputToken: outputAddr,
-        inputAmount,
-        chainId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Router API error: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  throw new Error('Router not configured: no API URL or fixtures');
+  throw new Error('Router not configured: no API URL or fixtures enabled');
 }
 
 /**
