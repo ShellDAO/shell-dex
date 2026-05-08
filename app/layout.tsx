@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { WagmiProviderWrapper } from "@/components/WagmiProvider";
 
 export const metadata: Metadata = {
   title: "Shell DEX",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <WagmiProviderWrapper>{children}</WagmiProviderWrapper>
+      </body>
     </html>
   );
 }
