@@ -1,13 +1,21 @@
 /**
  * ERC20 token approval management for M3 swap execution.
- * 
+ *
  * Handles:
  * - Allowance checking
  * - Approval transaction building
  * - Unlimited vs. exact amount approval strategies
  */
 
-import { Address, erc20Abi, formatUnits, parseUnits } from 'viem';
+import {
+  type Address,
+  type Hex,
+  type PublicClient,
+  encodeFunctionData,
+  erc20Abi,
+  maxUint256,
+  zeroAddress,
+} from 'viem';
 
 export interface AllowanceCheckResult {
   currentAllowance: bigint;
@@ -17,8 +25,14 @@ export interface AllowanceCheckResult {
 
 export interface ApprovalTransactionData {
   to: Address;
-  data: string;
-  value: '0x0';
+  data: Hex;
+  value: bigint;
+}
+
+export const NATIVE_TOKEN_ADDRESS = zeroAddress;
+
+export function isNativeTokenAddress(tokenAddress: Address): boolean {
+  return tokenAddress.toLowerCase() === NATIVE_TOKEN_ADDRESS;
 }
 
 /**
@@ -35,9 +49,17 @@ export async function checkAllowance(
   tokenAddress: Address,
   spenderAddress: Address,
   ownerAddress: Address,
-  requiredAmount: string,
-  publicClient: any
+  requiredAmount: bigint,
+  publicClient: PublicClient
 ): Promise<AllowanceCheckResult> {
+  if (isNativeTokenAddress(tokenAddress)) {
+    return {
+      currentAllowance: maxUint256,
+      isApprovalNeeded: false,
+      approvalAmount: BigInt(0),
+    };
+  }
+
   try {
     const currentAllowance = await publicClient.readContract({
       address: tokenAddress,
@@ -46,13 +68,12 @@ export async function checkAllowance(
       args: [ownerAddress, spenderAddress],
     });
 
-    const requiredBig = BigInt(requiredAmount);
-    const isApprovalNeeded = BigInt(currentAllowance) < requiredBig;
+    const isApprovalNeeded = currentAllowance < requiredAmount;
 
     return {
-      currentAllowance: BigInt(currentAllowance),
+      currentAllowance,
       isApprovalNeeded,
-      approvalAmount: requiredBig,
+      approvalAmount: requiredAmount,
     };
   } catch (error) {
     console.error('Failed to check token allowance:', error);
@@ -76,45 +97,25 @@ export function buildApprovalTransaction(
   tokenAddress: Address,
   spenderAddress: Address,
   strategy: 'unlimited' | 'exact' = 'unlimited',
-  exactAmount?: string
+  exactAmount?: bigint
 ): ApprovalTransactionData {
   const approvalAmount = strategy === 'unlimited'
-    ? '115792089237316195423570985008687907853269984665640564039457584007913129639935' // max uint256
+    ? maxUint256
     : exactAmount;
 
   if (!approvalAmount) {
     throw new Error('exactAmount required for exact approval strategy');
   }
 
-  // Encode ERC20 approve(spender, amount) function call
-  // approve(address spender, uint256 amount)
-  // Function selector: 0x095ea7b3
-  const encoded = encodeERC20Approve(spenderAddress, approvalAmount);
-
   return {
     to: tokenAddress,
-    data: encoded,
-    value: '0x0',
+    data: encodeFunctionData({
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [spenderAddress, approvalAmount],
+    }),
+    value: BigInt(0),
   };
-}
-
-/**
- * Encode ERC20 approve function call.
- * 
- * Function signature: approve(address spender, uint256 amount)
- * Function selector (4 bytes): 0x095ea7b3
- */
-function encodeERC20Approve(spender: Address, amount: string): string {
-  const APPROVE_SELECTOR = '0x095ea7b3';
-  
-  // Pad address to 32 bytes (remove 0x, pad with zeros)
-  const paddedSpender = spender.slice(2).padStart(64, '0');
-  
-  // Convert amount to hex and pad to 32 bytes
-  const amountBig = BigInt(amount);
-  const paddedAmount = amountBig.toString(16).padStart(64, '0');
-  
-  return `${APPROVE_SELECTOR}${paddedSpender}${paddedAmount}`;
 }
 
 /**

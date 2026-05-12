@@ -13,19 +13,20 @@
 'use client';
 
 import React from 'react';
-import { SupportedChainId } from '@/config/chains';
+import { SupportedChainId, supportedChains } from '@/config/chains';
 
-export interface SwapReceiptData {
+export interface TransactionReceiptItem {
+  label: string;
+  value: string;
+  tone?: 'default' | 'success' | 'danger';
+}
+
+export interface TransactionReceiptData {
   transactionHash: string;
   status: 'success' | 'failed';
-  inputToken: {
-    symbol: string;
-    amount: string;
-  };
-  outputToken: {
-    symbol: string;
-    amount: string;
-  };
+  title: string;
+  summary?: string;
+  items: TransactionReceiptItem[];
   fee?: {
     amount: string;
     currency: string;
@@ -34,11 +35,12 @@ export interface SwapReceiptData {
   blockTime?: number;
   confirmations?: number;
   chainId: SupportedChainId;
+  isSimulated?: boolean;
 }
 
 interface ReceiptModalProps {
   isOpen: boolean;
-  receipt?: SwapReceiptData;
+  receipt?: TransactionReceiptData;
   onClose: () => void;
 }
 
@@ -46,11 +48,8 @@ interface ReceiptModalProps {
  * Get block explorer URL for a transaction.
  */
 function getBlockExplorerTxUrl(chainId: SupportedChainId, txHash: string): string {
-  const explorers: Record<SupportedChainId, string> = {
-    42161: 'https://arbiscan.io/tx',
-    10: 'https://testnet.shell.network/tx',
-  };
-  return `${explorers[chainId]}/${txHash}`;
+  const baseUrl = supportedChains[chainId]?.blockExplorers?.default.url;
+  return baseUrl ? `${baseUrl}/tx/${txHash}` : '#';
 }
 
 /**
@@ -81,26 +80,34 @@ export function ReceiptModal({ isOpen, receipt, onClose }: ReceiptModalProps) {
           <h2 className={`text-lg font-bold ${
             isSuccess ? 'text-green-900' : 'text-red-900'
           }`}>
-            {isSuccess ? '✓ Swap Successful' : '✕ Swap Failed'}
+            {isSuccess ? `✓ ${receipt.title}` : `✕ ${receipt.title}`}
           </h2>
+          {receipt.summary ? (
+            <p className={`mt-1 text-sm ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
+              {receipt.summary}
+            </p>
+          ) : null}
         </div>
 
         {/* Content */}
         <div className="px-6 py-4 space-y-4">
-          {/* Amounts */}
           <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">From:</span>
-              <span className="font-mono text-sm">
-                {receipt.inputToken.amount} {receipt.inputToken.symbol}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">To:</span>
-              <span className="font-mono text-sm font-bold text-green-700">
-                {receipt.outputToken.amount} {receipt.outputToken.symbol}
-              </span>
-            </div>
+            {receipt.items.map((item) => (
+              <div key={`${item.label}-${item.value}`} className="flex justify-between items-center gap-4">
+                <span className="text-gray-600">{item.label}:</span>
+                <span
+                  className={`font-mono text-sm text-right ${
+                    item.tone === 'success'
+                      ? 'font-bold text-green-700'
+                      : item.tone === 'danger'
+                        ? 'font-bold text-red-700'
+                        : 'text-gray-900'
+                  }`}
+                >
+                  {item.value}
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Divider */}
@@ -114,9 +121,13 @@ export function ReceiptModal({ isOpen, receipt, onClose }: ReceiptModalProps) {
                 href={explorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-700 font-mono text-xs"
+                className={`font-mono text-xs ${
+                  receipt.isSimulated
+                    ? 'pointer-events-none text-gray-500'
+                    : 'text-blue-600 hover:text-blue-700'
+                }`}
               >
-                {formatTxHash(receipt.transactionHash)} ↗
+                {formatTxHash(receipt.transactionHash)} {receipt.isSimulated ? '(simulated)' : '↗'}
               </a>
             </div>
 
@@ -156,14 +167,20 @@ export function ReceiptModal({ isOpen, receipt, onClose }: ReceiptModalProps) {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg flex gap-2">
-          <a
-            href={explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 px-4 py-2 text-center rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 text-sm"
-          >
-            View on Explorer
-          </a>
+          {!receipt.isSimulated ? (
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 px-4 py-2 text-center rounded border border-blue-300 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 text-sm"
+            >
+              View on Explorer
+            </a>
+          ) : (
+            <div className="flex-1 px-4 py-2 text-center rounded border border-gray-200 bg-gray-50 text-gray-500 font-medium text-sm">
+              Simulated execution
+            </div>
+          )}
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 font-medium text-sm"
@@ -181,9 +198,9 @@ export function ReceiptModal({ isOpen, receipt, onClose }: ReceiptModalProps) {
  */
 export function useReceiptModal() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [receipt, setReceipt] = React.useState<SwapReceiptData | undefined>();
+  const [receipt, setReceipt] = React.useState<TransactionReceiptData | undefined>();
 
-  const show = React.useCallback((data: SwapReceiptData) => {
+  const show = React.useCallback((data: TransactionReceiptData) => {
     setReceipt(data);
     setIsOpen(true);
   }, []);

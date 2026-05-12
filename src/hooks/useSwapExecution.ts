@@ -1,36 +1,38 @@
-/**
- * Swap execution hook for M3.
- * 
- * Manages the complete swap flow:
- * 1. Check token allowance
- * 2. If needed, submit approval TX
- * 3. Wait for approval confirmation
- * 4. Submit swap TX
- * 5. Wait for swap confirmation
- * 6. Return receipt data
- */
-
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useAccount, useChainId } from 'wagmi';
-import { Address } from 'viem';
-import { SwapQuote } from '@/lib/swapRouter';
+import { useCallback, useState } from 'react';
+import { BaseError, useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi';
 import {
-  checkAllowance,
+  type Address,
+  type PublicClient,
+  type TransactionReceipt,
+  formatUnits,
+  parseUnits,
+} from 'viem';
+import type { SupportedChainId } from '@/config/chains';
+import { supportedChains } from '@/config/chains';
+import type { Token } from '@/config/tokens';
+import type { TransactionReceiptData } from '@/components/ReceiptModal';
+import {
+  buildSwapTransactionActivity,
+  recordTransactionActivity,
+} from '@/lib/activityHistory';
+import { type SwapQuote } from '@/lib/swapRouter';
+import {
   buildApprovalTransaction,
-  AllowanceCheckResult,
+  checkAllowance,
+  isNativeTokenAddress,
 } from '@/lib/tokenApproval';
 import {
   buildSwapTransaction,
   validateSwapTransaction,
-  SwapTransaction,
 } from '@/lib/swapTransaction';
 
 export enum SwapStage {
   IDLE = 'idle',
   CHECKING_ALLOWANCE = 'checking_allowance',
   AWAITING_APPROVAL = 'awaiting_approval',
+  APPROVAL_PENDING = 'approval_pending',
   APPROVAL_CONFIRMED = 'approval_confirmed',
   SUBMITTING_SWAP = 'submitting_swap',
   SWAP_PENDING = 'swap_pending',
@@ -42,7 +44,8 @@ export interface SwapExecutionState {
   stage: SwapStage;
   approvalTxHash?: string;
   swapTxHash?: string;
-  swapReceipt?: any;
+  swapReceipt?: TransactionReceipt;
+  receipt?: TransactionReceiptData;
   error?: string;
   isLoading: boolean;
 }
@@ -50,28 +53,26 @@ export interface SwapExecutionState {
 export interface SwapExecutionParams {
   quote: SwapQuote;
   slippageTolerance: number;
-  swapContract: Address;
+  swapContract?: Address;
   tokenAddress: Address;
-  onSuccess?: (receipt: any) => void;
+  inputToken: Token;
+  outputToken: Token;
+  onSuccess?: (receipt: TransactionReceiptData) => void;
   onError?: (error: Error) => void;
 }
 
-/**
- * Hook for executing swap with approval handling.
- */
+const INITIAL_STATE: SwapExecutionState = {
+  stage: SwapStage.IDLE,
+  isLoading: false,
+};
+
 export function useSwapExecution() {
   const { address: userAddress } = useAccount();
-  const chainId = useChainId();
+  const chainId = useChainId() as SupportedChainId | undefined;
+  const publicClient = usePublicClient({ chainId });
+  const { data: walletClient } = useWalletClient({ chainId });
+  const [state, setState] = useState<SwapExecutionState>(INITIAL_STATE);
 
-  const [state, setState] = useState<SwapExecutionState>({
-    stage: SwapStage.IDLE,
-    isLoading: false,
-    error: undefined,
-  });
-
-  /**
-   * Execute complete swap flow with approval if needed.
-   */
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
       const {
@@ -79,153 +80,201 @@ export function useSwapExecution() {
         slippageTolerance,
         swapContract,
         tokenAddress,
+        inputToken,
+        outputToken,
         onSuccess,
         onError,
       } = params;
 
-      if (!userAddress || !chainId) {
-        const error = new Error('Wallet not connected or chain not selected');
-        setState(prev => ({
-          ...prev,
+      if (!userAddress || !chainId || !walletClient || !publicClient) {
+        const error = new Error('Wallet connection is not ready. Reconnect and try again.');
+        setState({
+          ...INITIAL_STATE,
           stage: SwapStage.ERROR,
           error: error.message,
-          isLoading: false,
-        }));
+        });
+        onError?.(error);
+        return;
+      }
+
+      if (!quote.callData) {
+        const error = new Error('This quote is not executable. Refresh for a live route and try again.');
+        setState({
+          ...INITIAL_STATE,
+          stage: SwapStage.ERROR,
+          error: error.message,
+        });
         onError?.(error);
         return;
       }
 
       try {
-        // Stage 1: Check allowance
-        setState(prev => ({
-          ...prev,
+        setState({
+          ...INITIAL_STATE,
           stage: SwapStage.CHECKING_ALLOWANCE,
           isLoading: true,
-          error: undefined,
-        }));
+        });
 
-        // Check if approval is needed
-        // Note: In production, use actual PublicClient from wagmi
-        // For now, we assume the routing API provides all needed info
-        const allowanceCheckResult: AllowanceCheckResult = {
-          currentAllowance: BigInt(quote.outputAmount || 0),
-          isApprovalNeeded: false, // Will be determined by actual implementation
-          approvalAmount: BigInt(quote.inputAmount || 0),
-        };
+        const inputAmount = quote.inputAmount ?? '0';
+        const requiredInputAmount = toBaseUnits(inputAmount, inputToken.decimals, inputToken.symbol);
+        const resolvedSwapContract = (quote.swapContract ?? swapContract) as Address | undefined;
 
-        // Stage 2: Approval (if needed)
+        if (!resolvedSwapContract) {
+          throw new Error('Swap router address is missing for this quote.');
+        }
+
+        const allowanceCheckResult = await checkAllowance(
+          tokenAddress,
+          resolvedSwapContract,
+          userAddress,
+          requiredInputAmount,
+          publicClient
+        );
+
         if (allowanceCheckResult.isApprovalNeeded) {
           setState(prev => ({
             ...prev,
             stage: SwapStage.AWAITING_APPROVAL,
-            error: undefined,
           }));
 
           const approvalData = buildApprovalTransaction(
-            tokenAddress as Address,
-            swapContract,
+            tokenAddress,
+            resolvedSwapContract,
             'unlimited'
           );
 
-          // Submit approval transaction
-          // This would use wagmi's useContractWrite in actual implementation
-          // For now, placeholder
-          const approvalTxHash = '0x' + '0'.repeat(64);
+          const approvalTxHash = await walletClient.sendTransaction({
+            account: userAddress,
+            to: approvalData.to,
+            data: approvalData.data,
+            value: approvalData.value,
+          });
 
           setState(prev => ({
             ...prev,
-            stage: SwapStage.SWAP_PENDING,
+            stage: SwapStage.APPROVAL_PENDING,
             approvalTxHash,
-            error: undefined,
           }));
 
-          // In production: wait for approval receipt
-          // await waitForTransactionReceipt(approvalTxHash);
+          const approvalReceipt = await publicClient.waitForTransactionReceipt({
+            hash: approvalTxHash,
+          });
+
+          if (approvalReceipt.status !== 'success') {
+            throw new Error('Approval transaction reverted.');
+          }
+
+          setState(prev => ({
+            ...prev,
+            stage: SwapStage.APPROVAL_CONFIRMED,
+          }));
         } else {
           setState(prev => ({
             ...prev,
             stage: SwapStage.APPROVAL_CONFIRMED,
-            error: undefined,
           }));
         }
 
-        // Stage 3: Build and submit swap TX
         setState(prev => ({
           ...prev,
           stage: SwapStage.SUBMITTING_SWAP,
-          error: undefined,
         }));
 
         const swapTx = buildSwapTransaction({
           quote,
           slippageTolerance,
           userAddress,
-          swapContract,
+          swapContract: resolvedSwapContract,
+          inputAmount,
+          inputTokenDecimals: inputToken.decimals,
+          outputTokenDecimals: outputToken.decimals,
+          isNativeInput: isNativeTokenAddress(tokenAddress),
         });
 
-        // Validate transaction
         const validation = validateSwapTransaction(swapTx);
         if (!validation.valid) {
           throw new Error(`Invalid swap transaction: ${validation.errors.join(', ')}`);
         }
 
-        // Submit swap transaction
-        // This would use wagmi's useContractWrite in actual implementation
-        const swapTxHash = '0x' + '1'.repeat(64);
+        const swapTxHash = await walletClient.sendTransaction({
+          account: userAddress,
+          to: swapTx.to,
+          data: swapTx.data,
+          value: swapTx.value,
+          gas: swapTx.estimatedGas,
+        });
 
         setState(prev => ({
           ...prev,
           stage: SwapStage.SWAP_PENDING,
           swapTxHash,
-          error: undefined,
         }));
 
-        // In production: wait for swap receipt
-        // const receipt = await waitForTransactionReceipt(swapTxHash);
+        const swapReceipt = await publicClient.waitForTransactionReceipt({
+          hash: swapTxHash,
+        });
 
-        // Stage 4: Success
+        const receiptData = await buildReceiptData({
+          receipt: swapReceipt,
+          chainId,
+          inputToken,
+          outputToken,
+          inputAmount: quote.inputAmount,
+          outputAmount: quote.outputAmount,
+          publicClient,
+        });
+        recordTransactionActivity(
+          buildSwapTransactionActivity({
+            chainId,
+            owner: userAddress,
+            receipt: receiptData,
+            inputToken,
+            outputToken,
+            inputAmount: quote.inputAmount,
+            outputAmount: quote.outputAmount,
+          })
+        );
+
+        if (swapReceipt.status !== 'success') {
+          throw new SwapExecutionError('Swap transaction reverted.', receiptData, swapReceipt, swapTxHash);
+        }
+
         setState(prev => ({
           ...prev,
           stage: SwapStage.SUCCESS,
           swapTxHash,
+          swapReceipt,
+          receipt: receiptData,
           isLoading: false,
-          error: undefined,
         }));
 
-        onSuccess?.({ transactionHash: swapTxHash });
+        onSuccess?.(receiptData);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const normalizedError = normalizeSwapError(error);
         setState(prev => ({
           ...prev,
           stage: SwapStage.ERROR,
-          error: errorMessage,
+          swapTxHash: normalizedError.swapTxHash ?? prev.swapTxHash,
+          swapReceipt: normalizedError.receipt ?? prev.swapReceipt,
+          receipt: normalizedError.receiptData ?? prev.receipt,
+          error: normalizedError.message,
           isLoading: false,
         }));
-        onError?.(error instanceof Error ? error : new Error(errorMessage));
+        onError?.(normalizedError);
       }
     },
-    [userAddress, chainId]
+    [chainId, publicClient, userAddress, walletClient]
   );
 
-  /**
-   * Reset state to idle.
-   */
   const reset = useCallback(() => {
-    setState({
-      stage: SwapStage.IDLE,
-      isLoading: false,
-      error: undefined,
-    });
+    setState(INITIAL_STATE);
   }, []);
 
-  /**
-   * Retry failed swap (currently just resets state).
-   */
   const retry = useCallback(() => {
     if (state.stage === SwapStage.ERROR) {
       reset();
     }
-  }, [state.stage, reset]);
+  }, [reset, state.stage]);
 
   return {
     state,
@@ -235,19 +284,109 @@ export function useSwapExecution() {
   };
 }
 
-/**
- * Map swap stage to user-facing message.
- */
 export function getSwapStageMessage(stage: SwapStage): string {
   const messages: Record<SwapStage, string> = {
     [SwapStage.IDLE]: 'Ready to swap',
     [SwapStage.CHECKING_ALLOWANCE]: 'Checking token allowance...',
-    [SwapStage.AWAITING_APPROVAL]: 'Waiting for approval signature...',
-    [SwapStage.APPROVAL_CONFIRMED]: 'Token approved',
-    [SwapStage.SUBMITTING_SWAP]: 'Preparing transaction...',
-    [SwapStage.SWAP_PENDING]: 'Transaction pending...',
+    [SwapStage.AWAITING_APPROVAL]: 'Confirm the approval in your wallet...',
+    [SwapStage.APPROVAL_PENDING]: 'Approval submitted. Waiting for confirmation...',
+    [SwapStage.APPROVAL_CONFIRMED]: 'Token approval confirmed',
+    [SwapStage.SUBMITTING_SWAP]: 'Confirm the swap in your wallet...',
+    [SwapStage.SWAP_PENDING]: 'Swap submitted. Waiting for confirmation...',
     [SwapStage.SUCCESS]: 'Swap completed!',
     [SwapStage.ERROR]: 'Swap failed',
   };
   return messages[stage];
+}
+
+async function buildReceiptData({
+  receipt,
+  chainId,
+  inputToken,
+  outputToken,
+  inputAmount,
+  outputAmount,
+  publicClient,
+}: {
+  receipt: TransactionReceipt;
+  chainId: SupportedChainId;
+  inputToken: Token;
+  outputToken: Token;
+  inputAmount: string;
+  outputAmount: string;
+  publicClient: PublicClient;
+}): Promise<TransactionReceiptData> {
+  const block = await publicClient.getBlock({ blockHash: receipt.blockHash });
+  const chain = supportedChains[chainId];
+  const feeAmount = receipt.effectiveGasPrice
+    ? formatFeeAmount(receipt.gasUsed * receipt.effectiveGasPrice, chain.nativeCurrency.decimals)
+    : undefined;
+
+  return {
+    transactionHash: receipt.transactionHash,
+    status: receipt.status === 'success' ? 'success' : 'failed',
+    title: receipt.status === 'success' ? 'Swap Successful' : 'Swap Failed',
+    summary: `${inputToken.symbol} → ${outputToken.symbol}`,
+    items: [
+      {
+        label: 'From',
+        value: `${inputAmount} ${inputToken.symbol}`,
+      },
+      {
+        label: 'To',
+        value: `${outputAmount} ${outputToken.symbol}`,
+        tone: receipt.status === 'success' ? 'success' : 'danger',
+      },
+    ],
+    fee: feeAmount
+      ? {
+          amount: feeAmount,
+          currency: chain.nativeCurrency.symbol,
+        }
+      : undefined,
+    blockNumber: Number(receipt.blockNumber),
+    blockTime: Number(block.timestamp),
+    confirmations: 1,
+    chainId,
+  };
+}
+
+function toBaseUnits(amount: string, decimals: number, symbol: string): bigint {
+  try {
+    return parseUnits(amount, decimals);
+  } catch {
+    throw new Error(`Invalid ${symbol} amount.`);
+  }
+}
+
+function formatFeeAmount(amount: bigint, decimals: number): string {
+  const formatted = formatUnits(amount, decimals);
+  const [whole, fraction = ''] = formatted.split('.');
+  return fraction ? `${whole}.${fraction.slice(0, 6)}`.replace(/\.$/, '') : whole;
+}
+
+class SwapExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly receiptData?: TransactionReceiptData,
+    readonly receipt?: TransactionReceipt,
+    readonly swapTxHash?: string
+  ) {
+    super(message);
+  }
+}
+
+function normalizeSwapError(error: unknown): SwapExecutionError {
+  if (error instanceof SwapExecutionError) {
+    return error;
+  }
+
+  const message =
+    error instanceof BaseError
+      ? error.shortMessage
+      : error instanceof Error
+        ? error.message
+        : 'Unknown swap error';
+
+  return new SwapExecutionError(message);
 }

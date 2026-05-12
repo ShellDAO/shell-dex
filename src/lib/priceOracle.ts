@@ -123,18 +123,19 @@ export async function getTokenPrices(
 async function fetchTokenPriceFromAPI(token: Token): Promise<number> {
   // Map token IDs to CoinGecko IDs
   const coinGeckoMap: Record<string, string> = {
-    ETH: 'ethereum',
-    USDC: 'usd-coin',
-    USDT: 'tether',
-    DAI: 'dai',
-    ARB: 'arbitrum',
-    SHELL: 'shell', // May not exist on CoinGecko; use fallback
+    eth: 'ethereum',
+    usdc: 'usd-coin',
+    usdt: 'tether',
+    dai: 'dai',
+    arb: 'arbitrum',
+    shell: 'shell', // May not exist on CoinGecko; use fallback
   };
 
-  const cgId = coinGeckoMap[token.id];
+  const tokenKey = token.id.toLowerCase();
+  const cgId = coinGeckoMap[tokenKey];
   if (!cgId) {
     // Unknown token; use fallback price
-    return getTokenFallbackPrice(token.id);
+    return getTokenFallbackPrice(tokenKey);
   }
 
   try {
@@ -155,10 +156,10 @@ async function fetchTokenPriceFromAPI(token: Token): Promise<number> {
       return price;
     }
 
-    return getTokenFallbackPrice(token.id);
+    return getTokenFallbackPrice(tokenKey);
   } catch (error) {
     console.error(`Failed to fetch price for ${token.symbol}:`, error);
-    return getTokenFallbackPrice(token.id);
+    return getTokenFallbackPrice(tokenKey);
   }
 }
 
@@ -169,15 +170,15 @@ async function fetchTokenPriceFromAPI(token: Token): Promise<number> {
  */
 function getTokenFallbackPrice(tokenId: string): number {
   const fallbackPrices: Record<string, number> = {
-    ETH: 3500,
-    USDC: 1,
-    USDT: 1,
-    DAI: 1,
-    ARB: 0.5,
-    SHELL: 0.1, // Placeholder for Shell token
+    eth: 3500,
+    usdc: 1,
+    usdt: 1,
+    dai: 1,
+    arb: 0.5,
+    shell: 0.1, // Placeholder for Shell token
   };
 
-  return fallbackPrices[tokenId] || 0;
+  return fallbackPrices[tokenId.toLowerCase()] || 0;
 }
 
 /**

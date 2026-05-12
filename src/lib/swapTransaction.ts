@@ -1,29 +1,32 @@
 /**
  * Swap transaction building for M3 execution.
- * 
- * Constructs viem Transaction objects from routing quotes,
+ *
+ * Constructs viem transaction requests from routing quotes,
  * applies slippage adjustments, and validates output amounts.
  */
 
-import { Address, parseUnits } from 'viem';
+import { type Address, type Hex, isAddress, parseUnits } from 'viem';
 import { SwapQuote } from './swapRouter';
-import { Quote } from '@/hooks';
 
 export interface SwapTransactionParams {
   quote: SwapQuote;
   slippageTolerance: number; // 0-1 (e.g., 0.005 = 0.5%)
   userAddress: Address;
-  swapContract: Address;
+  swapContract?: Address;
+  inputAmount: string;
+  inputTokenDecimals: number;
+  outputTokenDecimals: number;
+  isNativeInput: boolean;
 }
 
 export interface SwapTransaction {
   to: Address;
   from: Address;
-  data: string;
-  value: '0x0' | string;
-  estimatedGas?: string;
-  minOutput: string;
-  expectedOutput: string;
+  data: Hex;
+  value: bigint;
+  estimatedGas?: bigint;
+  minOutput: bigint;
+  expectedOutput: bigint;
 }
 
 /**
@@ -34,22 +37,21 @@ export interface SwapTransaction {
  * @returns Minimum acceptable output after slippage
  */
 export function calculateMinimumOutput(
-  outputAmount: string,
+  outputAmount: bigint,
   slippageTolerance: number
-): string {
+): bigint {
   if (slippageTolerance < 0 || slippageTolerance > 0.5) {
     throw new Error('Slippage tolerance must be between 0 and 0.5 (0% to 50%)');
   }
 
-  const outputBig = BigInt(outputAmount);
-  const slippageAmount = (outputBig * BigInt(Math.round(slippageTolerance * 100))) / BigInt(10000);
-  const minimumOutput = outputBig - slippageAmount;
+  const slippageAmount = (outputAmount * BigInt(Math.round(slippageTolerance * 100))) / BigInt(10000);
+  const minimumOutput = outputAmount - slippageAmount;
 
   if (minimumOutput <= BigInt(0)) {
     throw new Error('Slippage tolerance too high; minimum output would be zero');
   }
 
-  return minimumOutput.toString();
+  return minimumOutput;
 }
 
 /**
@@ -66,6 +68,10 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
     slippageTolerance,
     userAddress,
     swapContract,
+    inputAmount,
+    inputTokenDecimals,
+    outputTokenDecimals,
+    isNativeInput,
   } = params;
 
   // Validate inputs
@@ -78,21 +84,29 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
   }
 
   // Calculate minimum output with slippage
-  const minOutput = calculateMinimumOutput(quote.outputAmount, slippageTolerance);
+  const expectedOutput = parseAmountToBaseUnits(quote.outputAmount, outputTokenDecimals, 'Quote output');
+  const minOutput = calculateMinimumOutput(expectedOutput, slippageTolerance);
+  const resolvedSwapContract = (quote.swapContract ?? swapContract) as Address | undefined;
 
   // For now, use call data directly from quote
   // In production, may need to encode slippage into call data
   // depending on router interface (e.g., update minOutput parameter)
   const callData = quote.callData;
 
+  if (!resolvedSwapContract) {
+    throw new Error('Quote missing swap contract; cannot build transaction');
+  }
+
   return {
-    to: swapContract,
+    to: resolvedSwapContract,
     from: userAddress,
-    data: callData,
-    value: '0x0', // Assume ERC20 swap, not ETH swap
-    estimatedGas: quote.estimatedGas,
+    data: callData as Hex,
+    value: isNativeInput
+      ? parseAmountToBaseUnits(inputAmount, inputTokenDecimals, 'Input')
+      : BigInt(0),
+    estimatedGas: quote.estimatedGas ? BigInt(quote.estimatedGas) : undefined,
     minOutput,
-    expectedOutput: quote.outputAmount,
+    expectedOutput,
   };
 }
 
@@ -127,11 +141,11 @@ export function validateSwapTransaction(tx: SwapTransaction): {
 } {
   const errors: string[] = [];
 
-  if (!tx.to || !tx.to.startsWith('0x')) {
+  if (!tx.to || !isAddress(tx.to)) {
     errors.push('Invalid router contract address');
   }
 
-  if (!tx.from || !tx.from.startsWith('0x')) {
+  if (!tx.from || !isAddress(tx.from)) {
     errors.push('Invalid user address');
   }
 
@@ -139,11 +153,11 @@ export function validateSwapTransaction(tx: SwapTransaction): {
     errors.push('Invalid transaction data');
   }
 
-  if (BigInt(tx.minOutput) <= BigInt(0)) {
+  if (tx.minOutput <= BigInt(0)) {
     errors.push('Minimum output must be greater than zero');
   }
 
-  if (BigInt(tx.minOutput) > BigInt(tx.expectedOutput)) {
+  if (tx.minOutput > tx.expectedOutput) {
     errors.push('Minimum output cannot exceed expected output');
   }
 
@@ -151,4 +165,16 @@ export function validateSwapTransaction(tx: SwapTransaction): {
     valid: errors.length === 0,
     errors,
   };
+}
+
+function parseAmountToBaseUnits(
+  amount: string,
+  decimals: number,
+  label: string
+): bigint {
+  try {
+    return parseUnits(amount, decimals);
+  } catch {
+    throw new Error(`${label} amount is invalid for token decimals`);
+  }
 }
