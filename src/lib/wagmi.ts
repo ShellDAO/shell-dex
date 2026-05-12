@@ -1,15 +1,14 @@
 /**
  * Wagmi client configuration for shell-dex M1.
- * 
+ *
  * This module exports a pre-configured wagmi client that:
  * - Connects Arbitrum One and Shell Testnet chains
- * - Uses MetaMask and WalletConnect as connector strategies
+ * - Uses injected browser wallets
  * - Handles custom RPC endpoints defined in chain config
  */
 
-import { createConfig, http } from 'wagmi';
+import { createConfig, http, injected } from 'wagmi';
 import { arbitrum } from 'wagmi/chains';
-import { metaMask, walletConnect } from 'wagmi/connectors';
 import { arbitrumOne, shellTestnet } from '@/config/chains';
 
 /**
@@ -35,12 +34,7 @@ const shellTestnetWagmiChain = {
  */
 export const wagmiConfig = createConfig({
   chains: [arbitrum, shellTestnetWagmiChain] as const,
-  connectors: [
-    metaMask(),
-    walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
-    }),
-  ],
+  connectors: [injected()],
   transports: {
     [arbitrum.id]: http(arbitrumOne.rpcUrls.default.http[0]),
     [shellTestnetWagmiChain.id]: http(shellTestnet.rpcUrls.default.http[0]),
