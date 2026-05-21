@@ -61,7 +61,7 @@ export const arbitrumOne: ChainConfig = {
     },
   },
   features: {
-    walletConnect: true,
+    walletConnect: false,
     networkSwitch: true,
     swapEnabled: false, // M1: disabled; swap routing planned for M2/M3
   },
@@ -87,8 +87,14 @@ export const shellTestnet: ChainConfig = {
       http: ['https://rpc.testnet.shell.network'],
     },
   },
+  blockExplorers: {
+    default: {
+      name: 'Shell Explorer',
+      url: 'https://testnet.shell.network',
+    },
+  },
   features: {
-    walletConnect: true,
+    walletConnect: false,
     networkSwitch: true,
     swapEnabled: false, // M1: disabled; requires on-chain routing setup
   },

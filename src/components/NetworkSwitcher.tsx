@@ -14,8 +14,10 @@
 import React, { useState } from 'react';
 import { useChainId, useSwitchChain } from 'wagmi';
 import { allChains, supportedChains, chainIds } from '@/config/chains';
+import { useMounted } from '@/hooks/useMounted';
 
 export function NetworkSwitcher() {
+  const mounted = useMounted();
   const chainId = useChainId();
   const { switchChain, isPending } = useSwitchChain();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -76,33 +78,33 @@ export function NetworkSwitcher() {
   return (
     <div className="relative">
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
-        disabled={isPending}
+        onClick={() => mounted && setShowDropdown(!showDropdown)}
+        disabled={!mounted || isPending}
         className={`
-          px-4 py-2 rounded border text-sm font-medium transition
+          rounded-xl border px-3 py-2 text-sm font-medium transition
           ${
-            isUnsupported
-              ? 'border-red-500 bg-red-50 text-red-700 hover:bg-red-100'
-              : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+            mounted && isUnsupported
+              ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
           }
           disabled:opacity-50 disabled:cursor-not-allowed
         `}
       >
-        {currentChain ? currentChain.name : 'Unsupported Network'}
+        {mounted ? (currentChain ? currentChain.name : 'Unsupported Network') : 'Select Network'}
       </button>
 
-      {showDropdown && (
-        <div className="absolute top-full mt-2 w-48 border border-gray-300 rounded bg-white shadow-lg z-10">
+      {mounted && showDropdown && (
+        <div className="absolute top-full right-0 z-10 mt-2 w-48 rounded-2xl border border-gray-200 bg-white p-1 shadow-xl">
           {allChains.map(chain => (
             <button
               key={chain.id}
               onClick={() => handleSwitchChain(chain.id)}
               disabled={isPending || chain.id === chainId}
               className={`
-                w-full text-left px-4 py-2 hover:bg-gray-100 transition
+                w-full rounded-xl px-3 py-2 text-left text-sm transition hover:bg-gray-100
                 ${
                   chain.id === chainId
-                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    ? 'bg-blue-50 font-medium text-blue-700'
                     : 'text-gray-900'
                 }
                 disabled:opacity-50 disabled:cursor-not-allowed
