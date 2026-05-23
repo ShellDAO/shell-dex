@@ -4,7 +4,9 @@ Shell DEX MVP frontend built with Next.js, wagmi, viem, and TanStack Query.
 
 ## MVP scope
 
-The current app ships four wallet-driven surfaces:
+The current app ships four wallet-driven surfaces. Some features remain
+partially simulated or fixture-backed pending final contract deployments — see
+**Current limitations** for details.
 
 - **Swap** — token selection, route-aware quoting, route selection, slippage controls, approvals, submission, and receipts
 - **Pools** — liquidity pool summaries, wallet LP positions, add/remove flows, and liquidity activity
