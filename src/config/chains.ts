@@ -69,7 +69,7 @@ export const arbitrumOne: ChainConfig = {
 
 /**
  * Shell Chain Testnet configuration.
- * Custom EVM-compatible chain requiring explicit add-network on first visit.
+ * Custom PQVM chain with Ethereum tooling-compatible RPC requiring explicit add-network on first visit.
  */
 export const shellTestnet: ChainConfig = {
   id: 10,
