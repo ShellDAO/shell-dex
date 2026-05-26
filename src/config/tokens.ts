@@ -5,7 +5,7 @@
  * Token metadata includes symbol, decimals, and chain-specific addresses.
  */
 
-import { SupportedChainId } from './chains';
+import { chainIds, SupportedChainId } from './chains';
 
 /**
  * Validate that an address is in canonical 32-byte Shell format.
@@ -15,6 +15,22 @@ export function isValidAddress(address: string | undefined): boolean {
   if (!address) return false;
   const regex = /^0x[0-9a-f]{64}$/i;
   return regex.test(address) && address === address.toLowerCase();
+}
+
+function isValidEvmAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const regex = /^0x[0-9a-fA-F]{40}$/;
+  return regex.test(address);
+}
+
+export function isValidAddressForChain(
+  address: string | undefined,
+  chainId: SupportedChainId
+): boolean {
+  if (chainId === chainIds.shellTestnet) {
+    return isValidAddress(address);
+  }
+  return isValidEvmAddress(address);
 }
 
 /**
@@ -50,7 +66,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x0000000000000000000000000000000000000000', // Native on Arbitrum
-      10: '0x0000000000000000000000000000000000000000', // Native on Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000000', // Native on Shell Testnet
     },
     logoUrl: '/tokens/eth.svg',
   },
@@ -61,7 +77,7 @@ export const tokens: Token[] = [
     decimals: 6,
     addresses: {
       42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5F86', // Arbitrum USDC.e
-      10: '0x0000000000000000000000000000000000000001', // Placeholder for Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000001', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/usdc.svg',
   },
@@ -72,7 +88,7 @@ export const tokens: Token[] = [
     decimals: 6,
     addresses: {
       42161: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', // Arbitrum USDT
-      10: '0x0000000000000000000000000000000000000002', // Placeholder for Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000002', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/usdt.svg',
   },
@@ -83,7 +99,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0xDA10009e962bF30dB994f59D57b01D466185CeFF', // Arbitrum DAI
-      10: '0x0000000000000000000000000000000000000003', // Placeholder for Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000003', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/dai.svg',
   },
@@ -94,7 +110,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x912CE59144191c1204E64559FE8253a0e108FF4e', // Arbitrum ARB
-      10: '0x0000000000000000000000000000000000000004', // Placeholder for Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000004', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/arb.svg',
   },
@@ -105,7 +121,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x0000000000000000000000000000000000000005', // Placeholder for Arbitrum
-      10: '0x0000000000000000000000000000000000000006', // Placeholder for Shell Testnet
+      10: '0x0000000000000000000000000000000000000000000000000000000000000006', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/shell.svg',
   },
@@ -135,10 +151,12 @@ export function getTokenAddress(
   if (!token) return undefined;
   const address = token.addresses[chainId];
   
-  if (address && !isValidAddress(address)) {
+  if (address && !isValidAddressForChain(address, chainId)) {
     throw new Error(
       `Invalid token address for ${tokenId} on chain ${chainId}: ${address}. ` +
-      `Expected 0x + 64 lowercase hex characters (32 bytes).`
+      (chainId === chainIds.shellTestnet
+        ? `Expected 0x + 64 lowercase hex characters (32 bytes).`
+        : `Expected 0x + 40 hex characters for an Ethereum tooling chain.`)
     );
   }
   
