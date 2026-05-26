@@ -7,6 +7,29 @@
 
 import { SupportedChainId } from './chains';
 
+/**
+ * Validate that an address is in canonical 32-byte Shell format.
+ * Valid format: 0x + 64 lowercase hex characters (representing 32 bytes).
+ */
+export function isValidAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const regex = /^0x[0-9a-f]{64}$/i;
+  return regex.test(address) && address === address.toLowerCase();
+}
+
+/**
+ * Normalize address to lowercase canonical form.
+ * Returns the address if valid, otherwise throws an error.
+ */
+export function normalizeAddress(address: string): string {
+  if (!isValidAddress(address)) {
+    throw new Error(
+      `Invalid address format: ${address}. Expected 0x + 64 lowercase hex characters (32 bytes).`
+    );
+  }
+  return address.toLowerCase();
+}
+
 export interface Token {
   id: string;
   symbol: string;
@@ -101,7 +124,8 @@ export function getToken(tokenId: string): Token | undefined {
 }
 
 /**
- * Get token address for a specific chain.
+ * Get token address for a specific chain with validation.
+ * Ensures the address is in canonical 32-byte format.
  */
 export function getTokenAddress(
   tokenId: string,
@@ -109,7 +133,16 @@ export function getTokenAddress(
 ): string | undefined {
   const token = getToken(tokenId);
   if (!token) return undefined;
-  return token.addresses[chainId];
+  const address = token.addresses[chainId];
+  
+  if (address && !isValidAddress(address)) {
+    throw new Error(
+      `Invalid token address for ${tokenId} on chain ${chainId}: ${address}. ` +
+      `Expected 0x + 64 lowercase hex characters (32 bytes).`
+    );
+  }
+  
+  return address;
 }
 
 /**
