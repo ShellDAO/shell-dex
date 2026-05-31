@@ -72,7 +72,7 @@ export const arbitrumOne: ChainConfig = {
  * Custom PQVM chain with Ethereum tooling-compatible RPC requiring explicit add-network on first visit.
  */
 export const shellTestnet: ChainConfig = {
-  id: 10,
+  id: 424242,
   name: 'Shell Testnet',
   nativeCurrency: {
     name: 'SHELL',
@@ -118,7 +118,7 @@ export const allChains: ChainConfig[] = [arbitrumOne, shellTestnet];
  */
 export const chainIds = {
   arbitrumOne: 42161,
-  shellTestnet: 10,
+  shellTestnet: 424242,
 } as const;
 
 export type SupportedChainId = typeof chainIds[keyof typeof chainIds];

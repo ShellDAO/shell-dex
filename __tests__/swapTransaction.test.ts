@@ -116,10 +116,11 @@ describe('encodeSlippageIntoCallData', () => {
     expect(decoded.args[3]).toBe(995n);
   });
 
-  it('returns original calldata when calldata does not match the Shell DEX router ABI', () => {
+  it('rejects calldata that does not match the Shell DEX router ABI', () => {
     const invalidCallData = '0xdeadbeef';
-    const result = encodeSlippageIntoCallData(invalidCallData, '995');
-    expect(result).toBe(invalidCallData);
+    expect(() => encodeSlippageIntoCallData(invalidCallData, '995')).toThrow(
+      'Quote calldata does not match the Shell router ABI'
+    );
   });
 
   it('handles zero address tokens gracefully', () => {
@@ -131,5 +132,24 @@ describe('encodeSlippageIntoCallData', () => {
     const updated = encodeSlippageIntoCallData(callData, '99');
     const decoded = decodeFunctionData({ abi: SHELL_DEX_ROUTER_ABI, data: updated as `0x${string}` });
     expect(decoded.args[3]).toBe(99n);
+  });
+
+  it('rejects calldata whose recipient does not match the connected wallet', () => {
+    const attacker = '0x4444444444444444444444444444444444444444' as `0x${string}`;
+    const callData = encodeFunctionData({
+      abi: SHELL_DEX_ROUTER_ABI,
+      functionName: 'swap',
+      args: [tokenIn, tokenOut, amountIn, 0n, attacker, deadline],
+    });
+
+    expect(() =>
+      encodeSlippageIntoCallData(callData, '99', {
+        tokenIn,
+        tokenOut,
+        amountIn,
+        recipient,
+        nowSeconds: 1,
+      })
+    ).toThrow('Quote calldata recipient does not match requested swap');
   });
 });

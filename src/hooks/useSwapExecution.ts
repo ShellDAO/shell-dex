@@ -125,10 +125,17 @@ export function useSwapExecution() {
 
         const inputAmount = quote.inputAmount ?? '0';
         const requiredInputAmount = toBaseUnits(inputAmount, inputToken.decimals, inputToken.symbol);
-        const resolvedSwapContract = (quote.swapContract ?? swapContract) as Address | undefined;
+        const resolvedSwapContract = swapContract;
 
         if (!resolvedSwapContract) {
-          throw new Error('Swap router address is missing for this quote.');
+          throw new Error('Swap router address is not configured.');
+        }
+        if (quote.swapContract && quote.swapContract.toLowerCase() !== resolvedSwapContract.toLowerCase()) {
+          throw new Error('Quote router does not match the configured swap router.');
+        }
+        const outputTokenAddress = outputToken.addresses[chainId] as Address | undefined;
+        if (!outputTokenAddress) {
+          throw new Error('Output token is not available on this network.');
         }
 
         const allowanceCheckResult = await checkAllowance(
@@ -200,6 +207,8 @@ export function useSwapExecution() {
           slippageTolerance,
           userAddress,
           swapContract: resolvedSwapContract,
+          inputTokenAddress: tokenAddress,
+          outputTokenAddress,
           inputAmount,
           inputTokenDecimals: inputToken.decimals,
           outputTokenDecimals: outputToken.decimals,
