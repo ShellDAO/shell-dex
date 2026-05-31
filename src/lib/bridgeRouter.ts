@@ -1,15 +1,15 @@
 import { type Address, formatUnits, keccak256, parseUnits, stringToHex } from 'viem';
 import { getTokenAddress, type Token } from '@/config/tokens';
-import { type SupportedChainId, supportedChains } from '@/config/chains';
+import { chainIds, type SupportedChainId, supportedChains } from '@/config/chains';
 
 export const BRIDGE_CHAINS = {
   42161: { name: 'Arbitrum One', bridgeId: 'arbitrum' },
-  10: { name: 'Shell Testnet', bridgeId: 'shell-testnet' },
+  [chainIds.shellTestnet]: { name: 'Shell Testnet', bridgeId: 'shell-testnet' },
 } as const satisfies Partial<Record<SupportedChainId, { name: string; bridgeId: string }>>;
 
 const BRIDGE_PAIR_PROTOCOLS: Record<string, Array<'stargate' | 'custom'>> = {
-  '42161:10': ['stargate'],
-  '10:42161': ['stargate'],
+  [`42161:${chainIds.shellTestnet}`]: ['stargate'],
+  [`${chainIds.shellTestnet}:42161`]: ['stargate'],
 };
 
 const BRIDGE_QUOTE_TTL_MS = 45_000;
@@ -156,7 +156,7 @@ function getVariableFeeBps(
   sourceChain: SupportedChainId,
   destinationChain: SupportedChainId
 ): number {
-  const pairWeight = sourceChain === 42161 && destinationChain === 10 ? 14 : 12;
+  const pairWeight = sourceChain === 42161 && destinationChain === chainIds.shellTestnet ? 14 : 12;
   const tokenWeight: Record<string, number> = {
     eth: 12,
     shell: 18,
@@ -190,7 +190,7 @@ function getDeterministicEtaSeconds(
   sourceChain: SupportedChainId,
   destinationChain: SupportedChainId
 ): number {
-  const base = sourceChain === 42161 && destinationChain === 10 ? 360 : 300;
+  const base = sourceChain === 42161 && destinationChain === chainIds.shellTestnet ? 360 : 300;
   const tokenDelta = (tokenId.length % 4) * 45;
   return base + tokenDelta;
 }

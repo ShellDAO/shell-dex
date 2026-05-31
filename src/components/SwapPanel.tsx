@@ -42,8 +42,7 @@ export function SwapPanel() {
   const supportedChainId = chainId as SupportedChainId;
   const availableTokens = getTokensForChain(supportedChainId);
   const chain = supportedChains[supportedChainId];
-  const resolvedSwapContract =
-    (swap.selectedRoute?.swapContract || swap.quote?.swapContract || SHELL_DEX_ROUTER_ADDRESS) as `0x${string}`;
+  const resolvedSwapContract = SHELL_DEX_ROUTER_ADDRESS as `0x${string}`;
   const swapReadinessError = useMemo(() => {
     if (!swap.quote) return null;
     if (swap.quoteExpired) return 'Quote expired. Refresh before submitting.';

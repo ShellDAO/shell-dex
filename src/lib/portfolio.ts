@@ -1,4 +1,4 @@
-import type { SupportedChainId } from '@/config/chains';
+import { chainIds, type SupportedChainId } from '@/config/chains';
 import type { Token } from '@/config/tokens';
 
 export type WalletBalanceSource = 'wallet-rpc' | 'simulated';
@@ -46,7 +46,7 @@ export function buildFallbackWalletBalance(
       return Number((60 + weight * 1_400).toFixed(2));
     case 'shell':
       return Number(
-        (chainId === 10 ? 2_000 + weight * 18_000 : 500 + weight * 3_500).toFixed(2)
+        (chainId === chainIds.shellTestnet ? 2_000 + weight * 18_000 : 500 + weight * 3_500).toFixed(2)
       );
     default:
       return 0;

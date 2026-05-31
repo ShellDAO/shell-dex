@@ -44,6 +44,8 @@ export interface SwapTransactionParams {
   slippageTolerance: number; // 0–1 as a decimal (e.g. 0.005 = 0.5 %).  Converted to BPS internally.
   userAddress: Address;
   swapContract?: Address;
+  inputTokenAddress: Address;
+  outputTokenAddress: Address;
   inputAmount: string;
   inputTokenDecimals: number;
   outputTokenDecimals: number;
@@ -105,6 +107,8 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
     slippageTolerance,
     userAddress,
     swapContract,
+    inputTokenAddress,
+    outputTokenAddress,
     inputAmount,
     inputTokenDecimals,
     outputTokenDecimals,
@@ -126,25 +130,32 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
   const slippageBps = Math.min(Math.max(rawBps, 1), 5000);
 
   // Calculate minimum output with slippage
+  const expectedInput = parseAmountToBaseUnits(inputAmount, inputTokenDecimals, 'Input');
   const expectedOutput = parseAmountToBaseUnits(quote.outputAmount, outputTokenDecimals, 'Quote output');
   const minOutput = calculateMinimumOutput(expectedOutput, slippageBps);
-  const resolvedSwapContract = (quote.swapContract ?? swapContract) as Address | undefined;
+  const resolvedSwapContract = swapContract;
 
-  // Encode minOutput into the calldata that the wallet signs so the router
-  // enforces the slippage constraint on-chain.
-  const callData = encodeSlippageIntoCallData(quote.callData, minOutput.toString());
+  if (quote.swapContract && resolvedSwapContract && quote.swapContract.toLowerCase() !== resolvedSwapContract.toLowerCase()) {
+    throw new Error('Quote router does not match configured swap router');
+  }
 
   if (!resolvedSwapContract) {
-    throw new Error('Quote missing swap contract; cannot build transaction');
+    throw new Error('Swap router address is not configured; cannot build transaction');
   }
+
+  // Decode and validate untrusted quote calldata before the wallet signs it.
+  const callData = encodeSlippageIntoCallData(quote.callData, minOutput.toString(), {
+    tokenIn: inputTokenAddress,
+    tokenOut: outputTokenAddress,
+    amountIn: expectedInput,
+    recipient: userAddress,
+  });
 
   return {
     to: resolvedSwapContract,
     from: userAddress,
     data: callData as Hex,
-    value: isNativeInput
-      ? parseAmountToBaseUnits(inputAmount, inputTokenDecimals, 'Input')
-      : BigInt(0),
+    value: isNativeInput ? expectedInput : BigInt(0),
     estimatedGas: quote.estimatedGas ? BigInt(quote.estimatedGas) : undefined,
     minOutput,
     expectedOutput,
@@ -160,10 +171,6 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
  * router contract enforces – the slippage limit computed by
  * `calculateMinimumOutput`.
  *
- * If the calldata does not decode against the known ABI (e.g. a third-party
- * router or a fixture stub), the function returns the original calldata and
- * logs a warning so the caller is not silently broken.
- *
  * @param originalCallData Hex calldata string from the routing quote
  * @param minOutput        Minimum acceptable output, as a decimal string (token base units)
  * @returns Updated calldata with `amountOutMinimum` set to `minOutput`
@@ -171,7 +178,13 @@ export function buildSwapTransaction(params: SwapTransactionParams): SwapTransac
 export function encodeSlippageIntoCallData(
   originalCallData: string,
   minOutput: string,
-  _routerInterface?: string
+  expected?: {
+    tokenIn: Address;
+    tokenOut: Address;
+    amountIn: bigint;
+    recipient: Address;
+    nowSeconds?: number;
+  }
 ): string {
   try {
     const decoded = decodeFunctionData({
@@ -179,24 +192,42 @@ export function encodeSlippageIntoCallData(
       data: originalCallData as Hex,
     });
 
+    if (decoded.functionName !== 'swap') {
+      throw new Error('Quote calldata is not a Shell router swap call');
+    }
+
     // args = [tokenIn, tokenOut, amountIn, amountOutMinimum, recipient, deadline]
     const [tokenIn, tokenOut, amountIn, , recipient, deadline] = decoded.args;
+    if (expected) {
+      assertAddressEqual(tokenIn, expected.tokenIn, 'tokenIn');
+      assertAddressEqual(tokenOut, expected.tokenOut, 'tokenOut');
+      assertAddressEqual(recipient, expected.recipient, 'recipient');
+      if (amountIn !== expected.amountIn) {
+        throw new Error('Quote calldata amountIn does not match requested input amount');
+      }
+
+      const now = BigInt(expected.nowSeconds ?? Math.floor(Date.now() / 1000));
+      if (deadline <= now || deadline > now + 7n * 24n * 60n * 60n) {
+        throw new Error('Quote calldata deadline is expired or too far in the future');
+      }
+    }
 
     return encodeFunctionData({
       abi: SHELL_DEX_ROUTER_ABI,
       functionName: 'swap',
       args: [tokenIn, tokenOut, amountIn, BigInt(minOutput), recipient, deadline],
     });
-  } catch {
-    // Calldata does not match the Shell DEX router ABI (e.g. fixture mode or a
-    // different router integration).  Return the original so execution is not
-    // broken; the missing on-chain enforcement will be caught during integration
-    // testing against a live router.
-    console.warn(
-      '[swapTransaction] encodeSlippageIntoCallData: calldata did not decode ' +
-      'against SHELL_DEX_ROUTER_ABI – returning original. minOutput was ' + minOutput
-    );
-    return originalCallData;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Quote calldata')) {
+      throw err;
+    }
+    throw new Error('Quote calldata does not match the Shell router ABI');
+  }
+}
+
+function assertAddressEqual(actual: Address, expected: Address, label: string): void {
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error(`Quote calldata ${label} does not match requested swap`);
   }
 }
 

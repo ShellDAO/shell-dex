@@ -66,7 +66,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x0000000000000000000000000000000000000000', // Native on Arbitrum
-      10: '0x0000000000000000000000000000000000000000000000000000000000000000', // Native on Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000000', // Native on Shell Testnet
     },
     logoUrl: '/tokens/eth.svg',
   },
@@ -77,7 +77,7 @@ export const tokens: Token[] = [
     decimals: 6,
     addresses: {
       42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5F86', // Arbitrum USDC.e
-      10: '0x0000000000000000000000000000000000000000000000000000000000000001', // Placeholder for Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000001', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/usdc.svg',
   },
@@ -88,7 +88,7 @@ export const tokens: Token[] = [
     decimals: 6,
     addresses: {
       42161: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', // Arbitrum USDT
-      10: '0x0000000000000000000000000000000000000000000000000000000000000002', // Placeholder for Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000002', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/usdt.svg',
   },
@@ -99,7 +99,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0xDA10009e962bF30dB994f59D57b01D466185CeFF', // Arbitrum DAI
-      10: '0x0000000000000000000000000000000000000000000000000000000000000003', // Placeholder for Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000003', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/dai.svg',
   },
@@ -110,7 +110,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x912CE59144191c1204E64559FE8253a0e108FF4e', // Arbitrum ARB
-      10: '0x0000000000000000000000000000000000000000000000000000000000000004', // Placeholder for Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000004', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/arb.svg',
   },
@@ -121,7 +121,7 @@ export const tokens: Token[] = [
     decimals: 18,
     addresses: {
       42161: '0x0000000000000000000000000000000000000005', // Placeholder for Arbitrum
-      10: '0x0000000000000000000000000000000000000000000000000000000000000006', // Placeholder for Shell Testnet
+      [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000006', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/shell.svg',
   },
