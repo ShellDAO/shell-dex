@@ -22,7 +22,8 @@ export function WalletConnect() {
 
   const formatAddress = (addr: string | undefined) => {
     if (!addr) return '';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+    // Show first 10 + last 8 chars for 32-byte (66-char) Shell addresses
+    return `${addr.slice(0, 10)}...${addr.slice(-8)}`;
   };
 
   if (!mounted) {
