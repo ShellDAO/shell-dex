@@ -78,7 +78,7 @@ export function calculateMinimumOutput(
   outputAmount: bigint,
   slippageBps: number
 ): bigint {
-  if (!Number.isInteger(slippageBps) || slippageBps < 1 || slippageBps > 5000) {
+  if (!Number.isSafeInteger(slippageBps) || slippageBps < 1 || slippageBps > 5000) {
     throw new Error('slippageBps must be an integer between 1 and 5000 (0.01 %–50 %)');
   }
 
