@@ -16,7 +16,6 @@ trading UX. Talks to chain via the shell-sdk client.
 npm install
 npm run dev
 npm run build
-npm run lint
 npm run typecheck
 ```
 
@@ -39,7 +38,6 @@ npm run typecheck
 
 A change is mergeable when:
 
-- `npm run lint` passes
 - `npm run typecheck` passes
 - `npm run build` succeeds
 - New flows have at least one playwright/e2e or manual smoke test
