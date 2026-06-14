@@ -116,7 +116,7 @@ export function PortfolioView() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <SummaryCard
           title="Connected wallet"
-          value={isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'}
+          value={isConnected && address ? `${address.slice(0, 10)}...${address.slice(-8)}` : 'Not connected'}
           detail="Portfolio reads are scoped by wallet address and active chain."
           className="lg:col-span-2"
         />

@@ -66,6 +66,9 @@ Some Shell Testnet token addresses are still placeholders until final contracts 
 - The app is **not production-ready**
 - Wallet connection currently uses **injected wallets only**; WalletConnect is not wired in the active wagmi config
 - Swap execution requires a configured router address and a quote that includes executable calldata
+- Contract-paymaster sponsored swaps remain disabled until `shell_estimatePaymasterGas`
+  returns `simulation_status: "simulated"`; current nodes expose only the
+  versioned `cap_only` gas-cap response.
 - Bridge execution is simulated end-to-end today
 - Liquidity reads/writes are fixture-backed simulations rather than on-chain pool integrations
 - Portfolio balances may fall back to deterministic simulated balances on unsupported token reads
