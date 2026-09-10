@@ -138,6 +138,24 @@ export function useSwapExecution() {
           throw new Error('Output token is not available on this network.');
         }
 
+        const swapTx = buildSwapTransaction({
+          quote,
+          slippageTolerance,
+          userAddress,
+          swapContract: resolvedSwapContract,
+          inputTokenAddress: tokenAddress,
+          outputTokenAddress,
+          inputAmount,
+          inputTokenDecimals: inputToken.decimals,
+          outputTokenDecimals: outputToken.decimals,
+          isNativeInput: isNativeTokenAddress(tokenAddress),
+        });
+
+        const validation = validateSwapTransaction(swapTx);
+        if (!validation.valid) {
+          throw new Error(`Invalid swap transaction: ${validation.errors.join(', ')}`);
+        }
+
         const allowanceCheckResult = await checkAllowance(
           tokenAddress,
           resolvedSwapContract,
@@ -201,24 +219,6 @@ export function useSwapExecution() {
           ...prev,
           stage: SwapStage.SUBMITTING_SWAP,
         }));
-
-        const swapTx = buildSwapTransaction({
-          quote,
-          slippageTolerance,
-          userAddress,
-          swapContract: resolvedSwapContract,
-          inputTokenAddress: tokenAddress,
-          outputTokenAddress,
-          inputAmount,
-          inputTokenDecimals: inputToken.decimals,
-          outputTokenDecimals: outputToken.decimals,
-          isNativeInput: isNativeTokenAddress(tokenAddress),
-        });
-
-        const validation = validateSwapTransaction(swapTx);
-        if (!validation.valid) {
-          throw new Error(`Invalid swap transaction: ${validation.errors.join(', ')}`);
-        }
 
         const swapTxHash = await walletClient.sendTransaction({
           account: userAddress,
