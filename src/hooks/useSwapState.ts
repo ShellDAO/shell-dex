@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChainId } from 'wagmi';
 import type { SupportedChainId } from '@/config/chains';
 import { getToken, getTokenAddress, type Token } from '@/config/tokens';
@@ -83,6 +83,7 @@ function getDefaultSwapTokens(chainId: SupportedChainId): {
 export function useSwapState(): SwapStateType {
   const chainId = useChainId() as SupportedChainId;
   const defaultTokens = getDefaultSwapTokens(chainId);
+  const quoteRequestId = useRef(0);
 
   const [inputToken, setInputToken] = useState<Token | null>(defaultTokens.inputToken);
   const [outputToken, setOutputToken] = useState<Token | null>(defaultTokens.outputToken);
@@ -101,6 +102,8 @@ export function useSwapState(): SwapStateType {
   const quoteExpired = quote && (Date.now() - quoteTimestamp > QUOTE_EXPIRY_MS);
 
   useEffect(() => {
+    quoteRequestId.current += 1;
+    setIsLoadingQuote(false);
     const nextDefaults = getDefaultSwapTokens(chainId);
     setInputToken(nextDefaults.inputToken);
     setOutputToken(nextDefaults.outputToken);
@@ -115,6 +118,8 @@ export function useSwapState(): SwapStateType {
   }, [chainId]);
 
   const clearQuoteState = useCallback(() => {
+    quoteRequestId.current += 1;
+    setIsLoadingQuote(false);
     setQuoteData(null);
     setAvailableRoutes([]);
     setSelectedRouteId(null);
@@ -169,7 +174,9 @@ export function useSwapState(): SwapStateType {
       return;
     }
 
+    const requestId = quoteRequestId.current;
     const { selectRouteQuote } = await import('@/lib/swapRouter');
+    if (requestId !== quoteRequestId.current) return;
     const nextQuote = selectRouteQuote(quote, routeId);
     setQuoteData(nextQuote);
     setAvailableRoutes(nextQuote.routes ?? []);
@@ -178,9 +185,11 @@ export function useSwapState(): SwapStateType {
   }, [quote]);
 
   const handleRefreshQuote = useCallback(async () => {
+    const requestId = ++quoteRequestId.current;
     const quoteAmount = tradeType === 'exactOut' ? outputAmount : inputAmount;
 
     if (!inputToken || !outputToken || !quoteAmount) {
+      setIsLoadingQuote(false);
       setQuoteError('Missing token or amount for quote refresh');
       return;
     }
@@ -202,15 +211,17 @@ export function useSwapState(): SwapStateType {
         preferredRouteId: selectedRouteId ?? undefined,
         tradeType,
       });
+      if (requestId !== quoteRequestId.current) return;
       handleSetQuote(newQuote);
     } catch (error) {
       const { handleRoutingError } = await import('@/lib/swapErrors');
+      if (requestId !== quoteRequestId.current) return;
       const swapError = handleRoutingError(error);
       const message = swapError.message;
       setQuoteError(message);
       setLastError(message);
     } finally {
-      setIsLoadingQuote(false);
+      if (requestId === quoteRequestId.current) setIsLoadingQuote(false);
     }
   }, [chainId, handleSetQuote, inputAmount, inputToken, outputAmount, outputToken, selectedRouteId, tradeType]);
 
@@ -219,6 +230,8 @@ export function useSwapState(): SwapStateType {
   }, []);
 
   const handleReset = useCallback(() => {
+    quoteRequestId.current += 1;
+    setIsLoadingQuote(false);
     const nextDefaults = getDefaultSwapTokens(chainId);
     setInputToken(nextDefaults.inputToken);
     setOutputToken(nextDefaults.outputToken);
