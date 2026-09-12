@@ -4,7 +4,7 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { useSwapState, useSwapExecution, getSwapStageMessage, SwapStage } from '@/hooks';
 import { getTokensForChain } from '@/config/tokens';
@@ -32,6 +32,14 @@ export function SwapPanel() {
   const swap = useSwapState();
   const execution = useSwapExecution();
   const receiptModal = useReceiptModal();
+  const quoteRefresh = useRef(swap.refreshQuote);
+  const quoteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    quoteRefresh.current = swap.refreshQuote;
+  }, [swap.refreshQuote]);
+
+  useEffect(() => () => clearTimeout(quoteTimer.current), []);
 
   const [showInputTokens, setShowInputTokens] = useState(false);
   const [showOutputTokens, setShowOutputTokens] = useState(false);
@@ -70,30 +78,25 @@ export function SwapPanel() {
     }
   };
 
+  const scheduleQuoteRefresh = (amount: string, hasTokens: boolean) => {
+    clearTimeout(quoteTimer.current);
+    if (amount && hasTokens) {
+      quoteTimer.current = setTimeout(() => {
+        void quoteRefresh.current();
+      }, 500);
+    }
+  };
+
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     swap.setInputAmount(value);
-    if (value && swap.outputToken) {
-      const timer = setTimeout(() => {
-        if (value === e.target.value) {
-          swap.refreshQuote();
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
+    scheduleQuoteRefresh(value, !!swap.outputToken);
   };
 
   const handleOutputAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     swap.setOutputAmount(value);
-    if (value && swap.inputToken) {
-      const timer = setTimeout(() => {
-        if (value === e.target.value) {
-          swap.refreshQuote();
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
+    scheduleQuoteRefresh(value, !!swap.inputToken);
   };
 
   const handleSlippageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
