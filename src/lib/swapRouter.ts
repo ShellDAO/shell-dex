@@ -154,6 +154,7 @@ function buildRoutesFromResponse(
     callData: firstString(response.callData),
     estimatedGas: coerceAmount(response.estimatedGas ?? response.gasEstimate),
     outputAmount: coerceAmount(response.outputAmount ?? response.output),
+    inputAmount: coerceAmount(response.inputAmount),
     minReceived: coerceAmount(response.minReceived),
     fees: isRecord(response.fees)
       ? {
