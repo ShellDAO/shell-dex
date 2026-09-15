@@ -62,6 +62,7 @@ export interface DiscoverRoutesOptions {
   callData?: string;
   estimatedGas?: string;
   outputAmount?: string;
+  inputAmount?: string;
   minReceived?: string;
   fees?: {
     total?: string;
@@ -125,6 +126,16 @@ function parseApiRoute(
     return null;
   }
 
+  const requiredInput = options.tradeType === 'exactOut'
+    ? coerceAmount(route.inputAmount, options.inputAmount ?? '')
+    : inputAmount;
+  if (options.tradeType === 'exactOut' && (
+    !/^\d+(?:\.\d+)?$/.test(requiredInput) || !/[1-9]/.test(requiredInput) ||
+    (requiredInput.split('.')[1]?.length ?? 0) > inputToken.decimals
+  )) {
+    return null;
+  }
+
   const hopCount = pathTokens.length - 1;
   const routeOutput = coerceAmount(
     route.output ?? route.outputAmount ?? route.expectedOutput,
@@ -137,7 +148,7 @@ function parseApiRoute(
   );
   const totalFees = coerceAmount(
     route.fees && typeof route.fees === 'object' ? (route.fees as RouteLike).total : undefined,
-    estimateFeeAmount(inputAmount, totalFeePercentage)
+    estimateFeeAmount(requiredInput, totalFeePercentage)
   );
   const totalGas = coerceAmount(
     route.estimatedGas ?? route.gas ?? route.gasEstimate,
@@ -200,7 +211,7 @@ function parseApiRoute(
     hops,
     inputToken,
     outputToken,
-    inputAmount,
+    inputAmount: requiredInput,
     expectedOutput: routeOutput,
     minReceived,
     estimatedTotalGas: totalGas,
