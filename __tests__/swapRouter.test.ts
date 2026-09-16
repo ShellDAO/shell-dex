@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeFunctionData, encodeFunctionData, type Address } from 'viem';
+import { decodeFunctionData, encodeFunctionData, isAddress, type Address } from 'viem';
 import { getToken } from '../src/config/tokens';
 import { configureRouter, getQuote } from '../src/lib/swapRouter';
 import { buildSwapTransaction, SHELL_DEX_ROUTER_ABI } from '../src/lib/swapTransaction';
+import { buildApprovalTransaction } from '../src/lib/tokenApproval';
 
 const input = getToken('usdc')!;
 const output = getToken('usdt')!;
@@ -30,6 +31,29 @@ afterEach(() => {
 });
 
 describe('API quote trade amounts', () => {
+  it('uses the Arbitrum USDC.e contract for quotes, swaps and approvals', async () => {
+    // Arbitrum Foundation: https://blog.arbitrum.foundation/usdc-to-come-natively-to-arbitrum/
+    const usdce = '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ routes: [route()] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quote = await getQuote(input, output, '1', chainId, { tradeType: 'exactIn' });
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request.inputToken.toLowerCase()).toBe(usdce);
+    expect(isAddress(input.addresses[chainId]!)).toBe(true);
+
+    const tx = buildSwapTransaction({
+      quote, slippageTolerance: 0.005, userAddress: recipient, swapContract: router,
+      inputTokenAddress: input.addresses[chainId] as Address,
+      outputTokenAddress: output.addresses[chainId] as Address,
+      inputAmount: quote.inputAmount, inputTokenDecimals: input.decimals,
+      outputTokenDecimals: output.decimals, isNativeInput: false,
+    });
+    expect(decodeFunctionData({ abi: SHELL_DEX_ROUTER_ABI, data: tx.data }).args[0].toLowerCase()).toBe(usdce);
+    expect(buildApprovalTransaction(input.addresses[chainId] as Address, router, 'exact', 1000000n)
+      .to.toLowerCase()).toBe(usdce);
+  });
+
   it('preserves the required input for an exact-output quote through transaction construction', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ routes: [route()] }) });
     vi.stubGlobal('fetch', fetchMock);

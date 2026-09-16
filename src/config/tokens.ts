@@ -76,7 +76,7 @@ export const tokens: Token[] = [
     name: 'USD Coin',
     decimals: 6,
     addresses: {
-      42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5F86', // Arbitrum USDC.e
+      42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', // Arbitrum USDC.e
       [chainIds.shellTestnet]: '0x0000000000000000000000000000000000000000000000000000000000000001', // Placeholder for Shell Testnet
     },
     logoUrl: '/tokens/usdc.svg',
