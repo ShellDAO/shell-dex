@@ -14,7 +14,6 @@
   "dependencies": {
     "@tanstack/react-query": "^5.100.9",
     "@wagmi/core": "^3.4.9",
-    "accounts": "^0.8.10",
     "lucide-react": "^1.14.0",
     "next": "^15.5.25",
     "react": "^19.1.0",
